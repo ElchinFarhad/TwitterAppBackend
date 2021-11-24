@@ -7,7 +7,6 @@ const db = new sqlite3.Database('./db/test.db', (err) => {
 });
 const bcrypt = require("bcrypt");
 
-
 const createUser = function (row) {
     const id = row.id;
     const username = row.username;
@@ -19,7 +18,7 @@ const createUser = function (row) {
 
 //Register new user
 exports.registerUser=function(username, email, password){
-    let hashedPassword = bcrypt.hashSync(password, 10);;
+    let hashedPassword = bcrypt.hashSync(password, 10);
     return new Promise((resolve, reject)=>{
         const sql='select * from user where username=?'
         db.all(sql, [username], (err,rows) => {
@@ -65,6 +64,30 @@ exports.getUser = function (name) {
     });
   };
 
+//Login admin 
+exports.getAdmin = function (name) {
+  return new Promise((resolve, reject) => {
+    const sql = "SELECT * FROM admin WHERE username = ?"
+
+    db.all(sql, [name], (err, rows) => {
+      if (err) { 
+        console.log("first"+ err);
+        reject(err);
+      }
+      else if (rows.length === 0) {
+        console.log("second"+ err);
+        resolve(undefined);
+
+      }
+      else {
+        const user = createUser(rows[0]);
+        resolve(user);
+      }
+      
+    });
+  });
+};
+
 
 
 
@@ -100,10 +123,15 @@ return new Promise((resolve, reject) => {
       err="You already follow this user";
       reject(err);
   }
+  else if(rows.length === 0){
+    err="User does not exist";
+    reject(err);
+}
     else { 
     const sql = 'Insert into followers(FollowerId, FollowingID) values(?,?)';
     db.run(sql, [currentId, follId], (err) => {
         if(err){
+          err="Request Failed";
             reject(err);
         }
         else
@@ -118,14 +146,26 @@ return new Promise((resolve, reject) => {
 //UnFollow User
 exports.unFollowUser = function(currentId, follId) {
   return new Promise((resolve, reject) => {
+
+    const sql1 = "SELECT * FROM followers WHERE FollowerId = ? AND FollowingID=?";
+    db.all(sql1, [currentId, follId], (err, rows) => {
+
+    if(rows.length === 0){
+      err="User does not exist";
+      reject(err);
+  }
+      else { 
       const sql = 'Delete from followers where followerID=? AND followingID=?';
       db.run(sql, [currentId, follId], (err) => {
+
           if(err){
               reject(err);
           }
           else
               resolve(null);
       })
+    }
+  })
   });
 }
 
@@ -157,9 +197,7 @@ exports.followedListUsers = function (id) {
                 resolve(null);
         })
     });
-    }
-
-
+  }
 
 //GET list of posts
 exports.getPosts = function (id) {
@@ -169,8 +207,91 @@ exports.getPosts = function (id) {
       if (err) {
         reject(err);
       }
-      const list = rows.map((row) => ({id: row.id, message: row.message, date: row.date, userId: row.userId}));
+      const list = rows.map((row) => ({id: row.id, message: row.message, date: row.date, UserId: row.UserId}));
       resolve(list);
     });
   });
   };
+
+
+
+//Get Post detail
+exports.getPostDetails = function (PostId) {
+  return new Promise((resolve, reject) => {
+    const sql = 'SELECT * from comments  LEFT join user  on  user.id=comments.commenterId where postId=?';
+    db.all(sql, [PostId], (err, rows) => {
+      if(rows.length === 0){
+        err="Post does not exist";
+        reject(err);
+    }
+      if (err) {
+        reject(err);
+      }
+      const list = rows.map((row) => ({Id: row.Id, commentorId: row.commenterId, postId: row.postId, Text: row.Text, Date: row.Date, username: row.username}));
+      resolve(list);
+    });
+  });
+  };
+
+
+
+// Add a comment 
+exports.addComment = function(id, postId, comment, date) {
+  return new Promise((resolve, reject) => {
+
+    const sql1 = "SELECT * FROM posts WHERE id = ?";
+    db.all(sql1, [postId], (err, rows) => {
+
+    if(rows.length === 0){
+      err="Post does not exist";
+      reject(err);
+  }
+      else { 
+      const sql = 'Insert into comments(commenterId, postId, Text, Date) values(?,?,?,?)';
+      db.run(sql, [id, postId, comment, date], (err) => {
+          if(err){
+            console.log("error mes ", err);
+              reject(err);
+          }
+          else
+              resolve(null);
+        })
+     }
+    })
+  })
+}
+
+
+//Delete comment
+exports.deleteComment = function(id, postId, commentId) {
+  return new Promise((resolve, reject) => {
+
+    const sql0 = "SELECT * FROM comments WHERE id = ?";
+    db.all(sql0, [commentId], (err, rows) => {
+
+    if(rows.length === 0){
+      err="Comment does not exist";
+      reject(err);
+  }
+
+    const sql1 = "SELECT * FROM posts WHERE id = ?";
+    db.all(sql1, [postId], (err, rows) => {
+
+    if(rows.length === 0){
+      err="Post does not exist";
+      reject(err);
+  }
+      else { 
+      const sql = 'Delete from comments where commenterId=? AND id=? AND postId=?';
+      db.run(sql, [id, commentId, postId], (err) => {
+          if(err){
+              reject(err);
+          }
+          else
+              resolve(null);
+        })
+       }
+      });
+    }); 
+  });
+}
